@@ -1,46 +1,61 @@
 #powershell
+cls
+$ProgressPreference = 'SilentlyContinue'
 
-
-for( [int]$yyyy = 2013; $yyyy -le 2013; $yyyy++ ){
-    
-    $leapyear = ($yyyy%4 -eq 0) -and -not ($yyyy%400 -eq 0)
-
-    for( [int]$mm = 1; $mm -le 12; $mm++ ){
-
+for( [int]$yyyy = 2000; $yyyy -le 2016; $yyyy++ ){
+    if( $yyyy -eq 2013 -or $yyyy -eq 2014 ){ continue }
+    for( [int]$m = 1; $m -le 12; $m++ ){
+        [string]$mm = $m.tostring('00')
+        write-host "Importing $yyyy-$mm"
         [string[]]$data  = @()
-        for( [int]$dd = 1; $dd -le [datetime]::DaysInMonth($yyyy,$mm); $dd++ ){
-            [string]$datefmt1 = $yyyy.ToString('0000' ) + $mm.ToString('00' ) + $dd.ToString('00')
-            [string]$datefmt2 = $yyyy.ToString('0000-') + $mm.ToString('00-') + $dd.ToString('00')
+        for( [int]$d = 1; $d -le [datetime]::DaysInMonth($yyyy,$mm); $d++ ){
+            [string]$dd = $d.tostring('00') 
+            $URI = "https://www.nrc.gov/reading-rm/doc-collections/event-status/reactor-status/$yyyy/$yyyy$mm$dd`ps.html"
+            
+            write-host "$URI`r`nImporting" -NoNewline
+            
+            $NRC = $null
+            [int]$counter = 0
+            $bad = $false
+            do {
+                try  { $NRC = Invoke-WebRequest -Uri $URI -TimeoutSec 6 -ErrorAction SilentlyContinue }
+                catch{ Write-Host '.' -NoNewline; $counter++; $bad =  $counter -gt 20 }
+            }until( $NRC.StatusDescription -eq 'OK' -or $bad)
+            if( $bad ){ 
+                Add-Content -Value "Error importing $URI" -Path 'errors.log'
+                Write-Host " Error!"
+                continue
 
-            $URI = "https://www.nrc.gov/reading-rm/doc-collections/event-status/reactor-status/$yyyy/$datefmt1`ps.html"
-            $HTML = Invoke-WebRequest -Uri $URI
-                        
-            $tables = @($HTML.ParsedHtml.getElementsByTagName('table'))
-            for( [int]$ii = 1; $ii -le 1; $ii++ ){
+            }
+
+            Write-Host " Done!`r`nProcessing" -NoNewline            
+
+            $tables = @($NRC.ParsedHtml.getElementsByTagName('table'))
+            for( [int]$ii = 1; $ii -le $tables.Count; $ii++ ){
                 $table = $tables[$ii]
 
                 foreach( $row in $table.rows ){
                     $cells = @($row.cells)
-
-                    Measure-Command {
-                    [string]$value = $cells | % { [string]$_.innertext } # ForEach-Object -Begin { [string]$temp = '' } -Process { $temp += ","+[string]($_.innertext) } -End { $temp.Substring(1) } 
-                    } | Select-Object -ExpandProperty totalseconds
-        
+                    
+                    [string]$value = $cells | ForEach-Object -Begin { [string]$temp = '' } -Process { $temp += ","+[string]($_.innertext) } -End { $temp.Substring(1) } 
+                    
                     if( $cells[0].tagName -eq 'TH' ){
                         [string[]]$titles = "Date,$value"
                     }elseif( $cells[0].tagName -eq 'TD' ){
-                        $data += "$datefmt2,$value"
+                        if( $value -match '(.*,\d+,)(\d+)\/(\d+)\/(\d{4})(,.*,[ \*],.*)' ){
+                            $value = $Matches[1] + $Matches[4] + "-" + $Matches[2] + "-" + $Matches[3] + $Matches[5]
+                        }
+                        $data += "$yyyy-$mm-$dd,$value"
                     }
-
-    
                 }
+                Write-Host '.' -NoNewline
             }
+            write-host ' Done!' 
         }
-        [string[]]$CSV = $titles
-        $CSV += $data
-
-        $csv | Set-Content "$pwd\$datefmt2.csv" -Encoding Ascii
+        ($titles + $data) | Set-Content "$pwd\$yyyy-$mm.csv" -Encoding Ascii
     }
 }
 
 
+
+$ProgressPreference = 'Continue'
