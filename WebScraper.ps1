@@ -2,9 +2,8 @@
 cls
 $ProgressPreference = 'SilentlyContinue'
 
-for( [int]$yyyy = 2000; $yyyy -le 2016; $yyyy++ ){
-    if( $yyyy -eq 2013 -or $yyyy -eq 2014 ){ continue }
-    for( [int]$m = 1; $m -le 12; $m++ ){
+for( [int]$yyyy = 1999; $yyyy -le 1999; $yyyy++ ){
+    for( [int]$m = 5; $m -le 12; $m++ ){
         [string]$mm = $m.tostring('00')
         write-host "Importing $yyyy-$mm"
         [string[]]$data  = @()
